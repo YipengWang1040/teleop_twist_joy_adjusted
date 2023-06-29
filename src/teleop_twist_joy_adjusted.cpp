@@ -58,6 +58,7 @@ struct TeleopTwistJoy::Impl
 
   double maximum_linear_step;
   double maximum_angular_step;
+  double command_frequency_limit;
 
   geometry_msgs::Twist prev_cmd_vel_msg;
 
@@ -105,11 +106,15 @@ TeleopTwistJoy::TeleopTwistJoy(ros::NodeHandle* nh, ros::NodeHandle* nh_param)
   }
 
   if(!nh_param->getParam("step_linear",pimpl_->maximum_linear_step)){
-    pimpl_->maximum_linear_step=0.5;
+    pimpl_->maximum_linear_step=0.05;
   }
 
   if(!nh_param->getParam("step_angular",pimpl_->maximum_angular_step)){
-    pimpl_->maximum_angular_step=0.5;
+    pimpl_->maximum_angular_step=0.05;
+  }
+
+  if(!nh_param->getParam("cmd_freq_limit",pimpl_->command_frequency_limit)){
+    pimpl_->command_frequency_limit=20;
   }
 
 
@@ -154,6 +159,14 @@ double getVal(const sensor_msgs::Joy::ConstPtr& joy_msg, const std::map<std::str
 void TeleopTwistJoy::Impl::sendCmdVelMsg(const sensor_msgs::Joy::ConstPtr& joy_msg,
                                          const std::string& which_map)
 {
+
+  static std::chrono::steady_clock::time_point prev_time = std::chrono::steady_clock::now();
+
+  std::chrono::steady_clock::time_point curr_time = std::chrono::steady_clock::now();
+  if(std::chrono::duration<double>(curr_time-prev_time).count() < (1. / (command_frequency_limit + 1)))
+    return;
+
+  prev_time = curr_time;
 
   // Initializes with zeros by default.
   geometry_msgs::Twist cmd_vel_msg;
