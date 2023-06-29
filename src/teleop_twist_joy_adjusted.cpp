@@ -25,7 +25,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include "geometry_msgs/Twist.h"
 #include "ros/ros.h"
 #include "sensor_msgs/Joy.h"
-#include "teleop_twist_joy/teleop_twist_joy.h"
+#include "teleop_twist_joy_adjusted/teleop_twist_joy_adjusted.h"
 
 #include <map>
 #include <string>
@@ -55,6 +55,11 @@ struct TeleopTwistJoy::Impl
 
   std::map<std::string, int> axis_angular_map;
   std::map< std::string, std::map<std::string, double> > scale_angular_map;
+
+  double maximum_linear_step;
+  double maximum_angular_step;
+
+  geometry_msgs::Twist prev_cmd_vel_msg;
 
   bool sent_disable_msg;
 };
@@ -99,6 +104,15 @@ TeleopTwistJoy::TeleopTwistJoy(ros::NodeHandle* nh, ros::NodeHandle* nh_param)
         pimpl_->scale_angular_map["turbo"]["yaw"], pimpl_->scale_angular_map["normal"]["yaw"]);
   }
 
+  if(!nh_param->getParam("step_linear",pimpl_->maximum_linear_step)){
+    pimpl_->maximum_linear_step=0.5;
+  }
+
+  if(!nh_param->getParam("step_angular",pimpl_->maximum_angular_step)){
+    pimpl_->maximum_angular_step=0.5;
+  }
+
+
   ROS_INFO_NAMED("TeleopTwistJoy", "Teleop enable button %i.", pimpl_->enable_button);
   ROS_INFO_COND_NAMED(pimpl_->enable_turbo_button >= 0, "TeleopTwistJoy",
       "Turbo on button %i.", pimpl_->enable_turbo_button);
@@ -140,15 +154,25 @@ double getVal(const sensor_msgs::Joy::ConstPtr& joy_msg, const std::map<std::str
 void TeleopTwistJoy::Impl::sendCmdVelMsg(const sensor_msgs::Joy::ConstPtr& joy_msg,
                                          const std::string& which_map)
 {
+
   // Initializes with zeros by default.
   geometry_msgs::Twist cmd_vel_msg;
 
   cmd_vel_msg.linear.x = getVal(joy_msg, axis_linear_map, scale_linear_map[which_map], "x");
+  if(abs(cmd_vel_msg.linear.x-prev_cmd_vel_msg.linear.x)>maximum_linear_step){
+    cmd_vel_msg.linear.x=cmd_vel_msg.linear.x>prev_cmd_vel_msg.linear.x>0?prev_cmd_vel_msg.linear.x+maximum_linear_step:prev_cmd_vel_msg.linear.x-maximum_linear_step;
+  }
   cmd_vel_msg.linear.y = getVal(joy_msg, axis_linear_map, scale_linear_map[which_map], "y");
   cmd_vel_msg.linear.z = getVal(joy_msg, axis_linear_map, scale_linear_map[which_map], "z");
+ 
   cmd_vel_msg.angular.z = getVal(joy_msg, axis_angular_map, scale_angular_map[which_map], "yaw");
+    if(abs(cmd_vel_msg.angular.z-prev_cmd_vel_msg.angular.z)>maximum_angular_step){
+    cmd_vel_msg.angular.z=cmd_vel_msg.angular.z-prev_cmd_vel_msg.angular.z>0?prev_cmd_vel_msg.angular.z+maximum_angular_step:prev_cmd_vel_msg.angular.z-maximum_angular_step;
+  }
   cmd_vel_msg.angular.y = getVal(joy_msg, axis_angular_map, scale_angular_map[which_map], "pitch");
   cmd_vel_msg.angular.x = getVal(joy_msg, axis_angular_map, scale_angular_map[which_map], "roll");
+
+  prev_cmd_vel_msg=cmd_vel_msg;
 
   cmd_vel_pub.publish(cmd_vel_msg);
   sent_disable_msg = false;
@@ -176,6 +200,7 @@ void TeleopTwistJoy::Impl::joyCallback(const sensor_msgs::Joy::ConstPtr& joy_msg
       // Initializes with zeros by default.
       geometry_msgs::Twist cmd_vel_msg;
       cmd_vel_pub.publish(cmd_vel_msg);
+      prev_cmd_vel_msg=cmd_vel_msg;
       sent_disable_msg = true;
     }
   }

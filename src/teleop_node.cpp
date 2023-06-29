@@ -24,7 +24,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 #include "ros/ros.h"
-#include "teleop_twist_joy/teleop_twist_joy.h"
+#include "teleop_twist_joy_adjusted/teleop_twist_joy_adjusted.h"
 
 int main(int argc, char *argv[])
 {
